@@ -7,8 +7,14 @@ from .features import add_indicators
 def _cached_fetch(ticker: str, period: str, interval: str) -> pd.DataFrame:
     return fetch_ohlcv(ticker, period=period, interval=interval)
 
+def _scalar(x):
+    # yfinance/pandas can sometimes return a 1-element Series; make it a scalar
+    if isinstance(x, pd.Series):
+        return x.iloc[-1]
+    return x
+
 def scan_universe(
-    tickers: list[str],
+    tickers,
     trend_fn,
     period="6mo",
     interval="1d",
@@ -22,40 +28,31 @@ def scan_universe(
     rows = []
     for t in tickers:
         df = _cached_fetch(t, period, interval)
-        if df.empty:
+        if df is None or df.empty:
             continue
 
         df = add_indicators(df, **indicator_kwargs)
         res = trend_fn(df, **trend_kwargs)
 
         last = df.iloc[-1]
-close = last["Close"]
-ma = last["MA"]
+        close = _scalar(last.get("Close"))
+        ma = _scalar(last.get("MA"))
+        atr = _scalar(last.get("ATR")) if "ATR" in df.columns else None
 
-if isinstance(close, pd.Series): close = close.iloc[-1]
-if isinstance(ma, pd.Series): ma = ma.iloc[-1]
-
-rows.append({
-    "Ticker": t,
-    "Last": float(close) if pd.notna(close) else None,
-    "MA": float(ma) if pd.notna(ma) else None,
-
-if isinstance(close, pd.Series): close = close.iloc[-1]
-if isinstance(ma, pd.Series): ma = ma.iloc[-1]
-
-rows.append({
-    "Ticker": t,
-    "Last": float(close) if pd.notna(close) else None,
-    "MA": float(ma) if pd.notna(ma) else None,
-,
-            "ATR": float(last["ATR"]) if "ATR" in df.columns and pd.notna(last["ATR"]) else None,
-            "Pass": bool(res["pass"]),
-            "Score": float(res["score"]),
-            "Notes": str(res["notes"]),
-        })
+        rows.append(
+            {
+                "Ticker": str(t),
+                "Last": float(close) if pd.notna(close) else None,
+                "MA": float(ma) if pd.notna(ma) else None,
+                "ATR": float(atr) if atr is not None and pd.notna(atr) else None,
+                "Pass": bool(res.get("pass", False)),
+                "Score": float(res.get("score", 0.0)),
+                "Notes": str(res.get("notes", "")),
+            }
+        )
 
     out = pd.DataFrame(rows)
     if out.empty:
         return out
 
-    return out.sort_values(["Pass", "Score"], ascending=[False, False]).head(limit)
+    return out.sort_values(["Pass", "Score"], ascending=[False, False]).head(int(limit))
