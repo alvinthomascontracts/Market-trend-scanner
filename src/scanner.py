@@ -39,6 +39,14 @@ rows.append({
     "Ticker": t,
     "Last": float(close) if pd.notna(close) else None,
     "MA": float(ma) if pd.notna(ma) else None,
+
+if isinstance(close, pd.Series): close = close.iloc[-1]
+if isinstance(ma, pd.Series): ma = ma.iloc[-1]
+
+rows.append({
+    "Ticker": t,
+    "Last": float(close) if pd.notna(close) else None,
+    "MA": float(ma) if pd.notna(ma) else None,
 ,
             "ATR": float(last["ATR"]) if "ATR" in df.columns and pd.notna(last["ATR"]) else None,
             "Pass": bool(res["pass"]),
